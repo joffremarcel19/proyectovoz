@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VozApp</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --text: #1c2230; --muted: #667085;
+    --border: #dde1e7; --accent: #1f6feb; --accent-text: #ffffff;
+    --danger: #c62828; --ok: #2e7d32; --warn-bg: #fff4e5; --warn-text: #7a4b00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #11151c; --panel: #1a1f29; --text: #e6e9ef; --muted: #98a2b3;
+      --border: #2c3442; --accent: #4c8dff; --accent-text: #0b0f16;
+      --danger: #ef5350; --ok: #66bb6a; --warn-bg: #3a2a10; --warn-text: #ffcc80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 20px 16px 4px; max-width: 960px; margin: 0 auto; }
+  header h1 { margin: 0; font-size: 22px; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  #estado { font-size: 13px; }
+  main { max-width: 960px; margin: 0 auto; padding: 16px; display: grid; gap: 16px;
+         grid-template-columns: 1fr 1fr; }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  section.ancho { grid-column: 1 / -1; }
+  h2 { margin: 0 0 12px; font-size: 16px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  input[type=text], select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+         border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+  textarea { min-height: 120px; resize: vertical; }
+  input[type=range] { width: 100%; }
+  button { padding: 8px 14px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+           background: var(--panel); color: var(--text); font: inherit; }
+  button.primario { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  .fila { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .aviso { background: var(--warn-bg); color: var(--warn-text); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+  .check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text); margin-top: 12px; }
+  .check input { margin-top: 3px; }
+  .msg { font-size: 13px; margin-top: 8px; min-height: 1.2em; }
+  .msg.error { color: var(--danger); } .msg.ok { color: var(--ok); }
+  ul.voces { list-style: none; margin: 0; padding: 0; }
+  ul.voces li { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+                padding: 8px 0; border-bottom: 1px solid var(--border); }
+  ul.voces li:last-child { border-bottom: 0; }
+  .sub { color: var(--muted); font-size: 12px; }
+  audio { width: 100%; margin-top: 12px; }
+  .grabando { color: var(--danger); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>VozApp</h1>
+  <p>Sube o graba una muestra de voz y genera audio de cualquier texto con esa voz. <span id="estado"></span></p>
+</header>
+<main>
+  <section>
+    <h2>1. Registrar voz</h2>
+    <label for="nombre">Nombre de la voz</label>
+    <input type="text" id="nombre" placeholder="Ej.: Locutor institucional" maxlength="80">
+
+    <label for="archivos">Audio de muestra (de 10 a 30 s de habla clara, sin música ni ruido)</label>
+    <input type="file" id="archivos" accept="audio/*,video/mp4,video/webm" multiple>
+
+    <div class="fila" style="margin-top:8px">
+      <button id="btnGrabar" type="button">🎙 Grabar con micrófono</button>
+      <span id="infoGrabacion" class="sub"></span>
+    </div>
+    <audio id="previa" controls hidden></audio>
+
+    <label class="check"><input type="checkbox" id="consentimiento">
+      Confirmo que la voz es mía o que tengo autorización expresa de la persona para clonarla,
+      y que no usaré el audio generado para suplantar ni engañar.</label>
+
+    <div class="fila" style="margin-top:12px">
+      <button class="primario" id="btnCrear">Registrar voz</button>
+    </div>
+    <div class="msg" id="msgCrear"></div>
+  </section>
+
+  <section>
+    <h2>Voces registradas</h2>
+    <ul class="voces" id="listaVoces"><li class="sub">Cargando…</li></ul>
+  </section>
+
+  <section class="ancho">
+    <h2>2. Generar audio</h2>
+    <div class="fila">
+      <div style="flex:2; min-width:200px">
+        <label for="voz">Voz</label>
+        <select id="voz"></select>
+      </div>
+      <div style="flex:1; min-width:120px">
+        <label for="idioma">Idioma</label>
+        <select id="idioma"></select>
+      </div>
+    </div>
+    <label for="texto">Texto (hasta 3000 caracteres)</label>
+    <textarea id="texto" maxlength="3000" placeholder="Escribe aquí lo que quieres que diga la voz…"></textarea>
+    <div class="sub" id="contador">0 / 3000</div>
+    <div class="fila">
+      <div style="flex:1; min-width:160px">
+        <label for="velocidad">Velocidad: <span id="vVel">1.0</span></label>
+        <input type="range" id="velocidad" min="0.5" max="2" step="0.1" value="1">
+      </div>
+      <div style="flex:1; min-width:160px">
+        <label for="temperatura">Variación: <span id="vTemp">0.7</span></label>
+        <input type="range" id="temperatura" min="0.1" max="1" step="0.05" value="0.7">
+      </div>
+    </div>
+    <div class="fila" style="margin-top:12px">
+      <button class="primario" id="btnGenerar">Generar audio</button>
+      <a id="descargar" hidden download="voz_generada.wav"><button type="button">Descargar WAV</button></a>
+    </div>
+    <div class="msg" id="msgGenerar"></div>
+    <audio id="resultado" controls hidden></audio>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let grabacion = null, recorder = null, chunks = [], inicioGrab = 0, timer = null;
+
+function mensaje(el, texto, tipo = "") { el.textContent = texto; el.className = "msg " + tipo; }
+
+async function errorDe(resp) {
+  try { const j = await resp.json(); return typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail); }
+  catch { return `Error ${resp.status}`; }
+}
+
+async function cargarEstado() {
+  const r = await fetch("/api/estado"); const e = await r.json();
+  $("estado").textContent = `· Procesando en ${e.dispositivo.toUpperCase()}` +
+    (e.dispositivo === "cpu" ? " (puede tardar ~20-60 s por oración)" : "");
+  $("idioma").innerHTML = e.idiomas.map(i => `<option ${i === "es" ? "selected" : ""}>${i}</option>`).join("");
+}
+
+async function cargarVoces() {
+  const voces = await (await fetch("/api/voces")).json();
+  const lista = $("listaVoces");
+  if (!voces.length) { lista.innerHTML = '<li class="sub">Aún no hay voces registradas.</li>'; }
+  else {
+    lista.innerHTML = "";
+    for (const v of voces) {
+      const li = document.createElement("li");
+      li.innerHTML = `<div><strong></strong><div class="sub">${v.duracion_muestra} s de muestra · ${v.creado.replace("T", " ")}</div></div>
+        <div class="fila"><button data-a="oir">▶</button><button data-a="borrar">Eliminar</button></div>`;
+      li.querySelector("strong").textContent = v.nombre;
+      li.querySelector('[data-a="oir"]').onclick = () => new Audio(`/api/voces/${v.id}/muestra`).play();
+      li.querySelector('[data-a="borrar"]').onclick = async () => {
+        if (!confirm(`¿Eliminar la voz "${v.nombre}"?`)) return;
+        await fetch(`/api/voces/${v.id}`, { method: "DELETE" }); cargarVoces();
+      };
+      lista.appendChild(li);
+    }
+  }
+  $("voz").innerHTML = voces.map(v => `<option value="${v.id}"></option>`).join("");
+  [...$("voz").options].forEach((o, i) => o.textContent = voces[i].nombre);
+}
+
+$("btnGrabar").onclick = async () => {
+  if (recorder && recorder.state === "recording") { recorder.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recorder = new MediaRecorder(stream); chunks = [];
+    recorder.ondataavailable = (e) => chunks.push(e.data);
+    recorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop()); clearInterval(timer);
+      grabacion = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+      $("previa").src = URL.createObjectURL(grabacion); $("previa").hidden = false;
+      $("btnGrabar").textContent = "🎙 Grabar de nuevo";
+      $("infoGrabacion").className = "sub";
+      $("infoGrabacion").textContent = `Grabación lista (${Math.round((Date.now() - inicioGrab) / 1000)} s)`;
+    };
+    recorder.start(); inicioGrab = Date.now();
+    $("btnGrabar").textContent = "⏹ Detener";
+    $("infoGrabacion").className = "grabando";
+    timer = setInterval(() => $("infoGrabacion").textContent =
+      `Grabando… ${Math.round((Date.now() - inicioGrab) / 1000)} s (lee un texto con voz natural)`, 500);
+  } catch { mensaje($("msgCrear"), "No se pudo acceder al micrófono.", "error"); }
+};
+
+$("btnCrear").onclick = async () => {
+  const nombre = $("nombre").value.trim(), archivos = $("archivos").files;
+  if (!nombre) return mensaje($("msgCrear"), "Escribe un nombre para la voz.", "error");
+  if (!archivos.length && !grabacion) return mensaje($("msgCrear"), "Sube un audio o graba uno.", "error");
+  if (!$("consentimiento").checked) return mensaje($("msgCrear"), "Debes confirmar la autorización.", "error");
+
+  const fd = new FormData();
+  fd.append("nombre", nombre); fd.append("consentimiento", "true");
+  for (const f of archivos) fd.append("archivos", f);
+  if (grabacion) fd.append("archivos", grabacion, "grabacion.webm");
+
+  $("btnCrear").disabled = true;
+  mensaje($("msgCrear"), "Analizando la voz… (la primera vez carga el modelo, puede tardar 1-2 min)");
+  try {
+    const r = await fetch("/api/voces", { method: "POST", body: fd });
+    if (!r.ok) throw new Error(await errorDe(r));
+    const v = await r.json();
+    mensaje($("msgCrear"), `Voz "${v.nombre}" registrada.`, "ok");
+    $("nombre").value = ""; $("archivos").value = ""; grabacion = null; $("previa").hidden = true;
+    $("infoGrabacion").textContent = ""; $("btnGrabar").textContent = "🎙 Grabar con micrófono";
+    await cargarVoces(); $("voz").value = v.id;
+  } catch (e) { mensaje($("msgCrear"), e.message, "error"); }
+  finally { $("btnCrear").disabled = false; }
+};
+
+$("btnGenerar").onclick = async () => {
+  const texto = $("texto").value.trim();
+  if (!$("voz").value) return mensaje($("msgGenerar"), "Primero registra una voz.", "error");
+  if (!texto) return mensaje($("msgGenerar"), "Escribe el texto a generar.", "error");
+  $("btnGenerar").disabled = true; $("descargar").hidden = true;
+  const t0 = Date.now();
+  const tick = setInterval(() => mensaje($("msgGenerar"), `Generando… ${Math.round((Date.now() - t0) / 1000)} s`), 500);
+  try {
+    const r = await fetch("/api/sintetizar", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ voz_id: $("voz").value, texto, idioma: $("idioma").value,
+        velocidad: +$("velocidad").value, temperatura: +$("temperatura").value }),
+    });
+    if (!r.ok) throw new Error(await errorDe(r));
+    const url = URL.createObjectURL(await r.blob());
+    $("resultado").src = url; $("resultado").hidden = false; $("resultado").play();
+    $("descargar").href = url; $("descargar").hidden = false;
+    clearInterval(tick);
+    mensaje($("msgGenerar"), `Listo en ${Math.round((Date.now() - t0) / 1000)} s.`, "ok");
+  } catch (e) { clearInterval(tick); mensaje($("msgGenerar"), e.message, "error"); }
+  finally { $("btnGenerar").disabled = false; }
+};
+
+$("texto").oninput = () => $("contador").textContent = `${$("texto").value.length} / 3000`;
+$("velocidad").oninput = () => $("vVel").textContent = (+$("velocidad").value).toFixed(1);
+$("temperatura").oninput = () => $("vTemp").textContent = (+$("temperatura").value).toFixed(2);
+
+cargarEstado(); cargarVoces();
+</script>
+</body>
+</html>
